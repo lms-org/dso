@@ -15,7 +15,7 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 # required libraries
 find_package(SuiteParse REQUIRED)
-find_package(Eigen3 REQUIRED)
+#find_package(Eigen3 REQUIRED)
 find_package(Boost COMPONENTS system thread) 
 
 # optional libraries
@@ -98,19 +98,19 @@ set(HAS_PANGOLIN 0)
 set(HAS_OPENCV 0)
 
 # decide if we have ziplib.
-if (LIBZIP_LIBRARY)
-	message("--- found ziplib (${LIBZIP_VERSION}), compiling with zip capability.")
-	add_definitions(-DHAS_ZIPLIB=1)
-	include_directories( ${LIBZIP_INCLUDE_DIR_ZIP} ${LIBZIP_INCLUDE_DIR_ZIPCONF} ) 
-else()
-	message("--- not found ziplib (${LIBZIP_LIBRARY}), compiling without zip capability.")
-	set(LIBZIP_LIBRARY "")
-endif()
+#if (LIBZIP_LIBRARY)
+#	message("--- found ziplib (${LIBZIP_VERSION}), compiling with zip capability.")
+#	add_definitions(-DHAS_ZIPLIB=1)
+#	include_directories( ${LIBZIP_INCLUDE_DIR_ZIP} ${LIBZIP_INCLUDE_DIR_ZIPCONF} )
+#else()
+#	message("--- not found ziplib (${LIBZIP_LIBRARY}), compiling without zip capability.")
+#	set(LIBZIP_LIBRARY "")
+#endif()
 
 
 # compile main library.
 #include_directories( ${CSPARSE_INCLUDE_DIR} ${CHOLMOD_INCLUDE_DIR}) 
-add_library(dso ${dso_SOURCE_FILES})# ${dso_opencv_SOURCE_FILES} ${dso_pangolin_SOURCE_FILES})
+add_library(dso SHARED ${dso_SOURCE_FILES})# ${dso_opencv_SOURCE_FILES} ${dso_pangolin_SOURCE_FILES})
 
 
 # build main executable (only if we have both OpenCV and Pangolin)

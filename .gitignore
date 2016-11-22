@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 *~
 build/
 build*
@@ -22,3 +23,12 @@ CMakeLists.txt.*
 ogre.log
 drive.sh
 *.pyc
+*.pro
+*.pro.user
+*.pro.user*
+build*
+build-*
+*.o
+*.so
+*.a
+*.so.*

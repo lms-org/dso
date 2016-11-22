@@ -284,42 +284,90 @@ Undistort* Undistort::getUndistorterForFile(std::string configFilename, std::str
 	float ic[10];
 
 	Undistort* u;
+
+    // for backwards-compatibility: Use RadTan model for 8 parameters.
 	if(std::sscanf(l1.c_str(), "%f %f %f %f %f %f %f %f",
 			&ic[0], &ic[1], &ic[2], &ic[3],
 			&ic[4], &ic[5], &ic[6], &ic[7]) == 8)
 	{
-		printf("found OpenCV camera model, building rectifier.\n");
-		u = new UndistortOpenCV(configFilename.c_str());
+        printf("found RadTan (OpenCV) camera model, building rectifier.\n");
+        u = new UndistortRadTan(configFilename.c_str(), true);
 		if(!u->isValid()) {delete u; return 0; }
-	}
-	else if(std::sscanf(l1.c_str(), "KannalaBrandt %f %f %f %f %f %f %f %f",
-			&ic[0], &ic[1], &ic[2], &ic[3],
-			&ic[4], &ic[5], &ic[6], &ic[7]) == 8)
-	{
-		printf("found KannalaBrandt camera model, building rectifier.\n");
-		u = new UndistortKB(configFilename.c_str());
-		if(!u->isValid()) {delete u; return 0; }
-	} else if(std::sscanf(l1.c_str(), "%f %f %f %f %f",
+    }
+
+    // for backwards-compatibility: Use Pinhole / FoV model for 5 parameter.
+    else if(std::sscanf(l1.c_str(), "%f %f %f %f %f",
 			&ic[0], &ic[1], &ic[2], &ic[3], &ic[4]) == 5)
 	{
 		if(ic[4]==0)
 		{
 			printf("found PINHOLE camera model, building rectifier.\n");
-			u = new UndistortPinhole(configFilename.c_str());
+            u = new UndistortPinhole(configFilename.c_str(), true);
 			if(!u->isValid()) {delete u; return 0; }
 		}
 		else
 		{
 			printf("found ATAN camera model, building rectifier.\n");
-			u = new UndistortFOV(configFilename.c_str());
+            u = new UndistortFOV(configFilename.c_str(), true);
 			if(!u->isValid()) {delete u; return 0; }
 		}
 	}
-	else
-	{
-		printf("could not read calib file! exit.");
-		exit(1);
-	}
+
+
+
+
+
+    // clean model selection implementation.
+    else if(std::sscanf(l1.c_str(), "KannalaBrandt %f %f %f %f %f %f %f %f",
+            &ic[0], &ic[1], &ic[2], &ic[3],
+            &ic[4], &ic[5], &ic[6], &ic[7]) == 8)
+    {
+        u = new UndistortKB(configFilename.c_str(), false);
+        if(!u->isValid()) {delete u; return 0; }
+    }
+
+
+    else if(std::sscanf(l1.c_str(), "RadTan %f %f %f %f %f %f %f %f",
+            &ic[0], &ic[1], &ic[2], &ic[3],
+            &ic[4], &ic[5], &ic[6], &ic[7]) == 8)
+    {
+        u = new UndistortRadTan(configFilename.c_str(), false);
+        if(!u->isValid()) {delete u; return 0; }
+    }
+
+
+    else if(std::sscanf(l1.c_str(), "EquiDistant %f %f %f %f %f %f %f %f",
+            &ic[0], &ic[1], &ic[2], &ic[3],
+            &ic[4], &ic[5], &ic[6], &ic[7]) == 8)
+    {
+        u = new UndistortEquidistant(configFilename.c_str(), false);
+        if(!u->isValid()) {delete u; return 0; }
+    }
+
+
+    else if(std::sscanf(l1.c_str(), "FOV %f %f %f %f %f",
+            &ic[0], &ic[1], &ic[2], &ic[3],
+            &ic[4], &ic[5], &ic[6], &ic[7]) == 5)
+    {
+        u = new UndistortFOV(configFilename.c_str(), false);
+        if(!u->isValid()) {delete u; return 0; }
+    }
+
+
+    else if(std::sscanf(l1.c_str(), "Pinhole %f %f %f %f %f",
+            &ic[0], &ic[1], &ic[2], &ic[3],
+            &ic[4], &ic[5], &ic[6], &ic[7]) == 8)
+    {
+        u = new UndistortPinhole(configFilename.c_str(), false);
+        if(!u->isValid()) {delete u; return 0; }
+    }
+
+
+    else
+    {
+        printf("could not read calib file! exit.");
+        exit(1);
+    }
 
 	u->loadPhotometricCalibration(
 				gammaFilename,
@@ -351,8 +399,6 @@ ImageAndExposure* Undistort::undistort(const MinimalImage<T>* image_raw, float e
 	{
 		float* out_data = result->image;
 		float* in_data = photometricUndist->output->image;
-		bool* out_data_oe = result->overexposedMap;
-		bool* in_data_oe = photometricUndist->output->overexposedMap;
 
 		float* noiseMapX=0;
 		float* noiseMapY=0;
@@ -690,8 +736,8 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
     std::getline(infile,l3);
     std::getline(infile,l4);
 
-	// l1 & l2
-	if(nPars == 5)
+    // l1 & l2
+    if(nPars == 5) // fov model
 	{
 		char buf[1000];
 		snprintf(buf, 1000, "%s%%lf %%lf %%lf %%lf %%lf", prefix.c_str());
@@ -710,7 +756,7 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
 			return;
 		}
 	}
-	else if(nPars == 8)
+	else if(nPars == 8) // KB, equi & radtan model
 	{
 		char buf[1000];
 		snprintf(buf, 1000, "%s%%lf %%lf %%lf %%lf %%lf %%lf %%lf %%lf %%lf %%lf", prefix.c_str());
@@ -741,23 +787,41 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
 
 
 
+    if(parsOrg[2] < 1 && parsOrg[3] < 1)
+    {
+        printf("\n\nFound fx=%f, fy=%f, cx=%f, cy=%f.\n I'm assuming this is the \"relative\" calibration file format,"
+               "and will rescale this by image width / height to fx=%f, fy=%f, cx=%f, cy=%f.\n\n",
+               parsOrg[0], parsOrg[1], parsOrg[2], parsOrg[3],
+               parsOrg[0] * wOrg, parsOrg[1] * hOrg, parsOrg[2] * wOrg - 0.5, parsOrg[3] * hOrg - 0.5 );
+
+        // rescale and substract 0.5 offset.
+        // the 0.5 is because I'm assuming the calibration is given such that the pixel at (0,0)
+        // contains the integral over intensity over [0,0]-[1,1], whereas I assume the pixel (0,0)
+        // to contain a sample of the intensity ot [0,0], which is best approximated by the integral over
+        // [-0.5,-0.5]-[0.5,0.5]. Thus, the shift by -0.5.
+        parsOrg[0] = parsOrg[0] * wOrg;
+        parsOrg[1] = parsOrg[1] * hOrg;
+        parsOrg[2] = parsOrg[2] * wOrg - 0.5;
+        parsOrg[3] = parsOrg[3] * hOrg - 0.5;
+    }
+
 
 
 	// l3
 	if(l3 == "crop")
 	{
 		outputCalibration[0] = -1;
-		printf("Out: Crop\n");
+        printf("Out: Rectify Crop\n");
 	}
 	else if(l3 == "full")
 	{
 		outputCalibration[0] = -2;
-		printf("Out: Full\n");
+        printf("Out: Rectify Full\n");
 	}
 	else if(l3 == "none")
 	{
 		outputCalibration[0] = -3;
-		printf("Out: Full\n");
+        printf("Out: No Rectification\n");
 	}
 	else if(std::sscanf(l3.c_str(), "%f %f %f %f %f", &outputCalibration[0], &outputCalibration[1], &outputCalibration[2], &outputCalibration[3], &outputCalibration[4]) == 5)
 	{
@@ -777,9 +841,17 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
 	if(std::sscanf(l4.c_str(), "%d %d", &w, &h) == 2)
 	{
 		if(benchmarkSetting_width != 0)
+        {
 			w = benchmarkSetting_width;
+            if(outputCalibration[0] == -3)
+                outputCalibration[0] = -1;  // crop instead of none, since probably resolution changed.
+        }
 		if(benchmarkSetting_width != 0)
+        {
 			h = benchmarkSetting_height;
+            if(outputCalibration[0] == -3)
+                outputCalibration[0] = -1;  // crop instead of none, since probably resolution changed.
+        }
 
 		printf("Output resolution: %d %d\n",w, h);
 	}
@@ -804,25 +876,35 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
 			exit(1);
 		}
 		K.setIdentity();
-		K(0,0) = parsOrg[0] * w;
-		K(1,1) = parsOrg[1] * h;
-		K(0,2) = parsOrg[2] * w - 0.5;
-		K(1,2) = parsOrg[3] * h - 0.5;
+        K(0,0) = parsOrg[0];
+        K(1,1) = parsOrg[1];
+        K(0,2) = parsOrg[2];
+        K(1,2) = parsOrg[3];
 		passthrough = true;
 	}
 	else
 	{
+
+
+        if(outputCalibration[2] > 1 || outputCalibration[3] > 1)
+        {
+            printf("\n\n\nWARNING: given output calibration (%f %f %f %f) seems wrong. It needs to be relative to image width / height!\n\n\n",
+                   outputCalibration[0],outputCalibration[1],outputCalibration[2],outputCalibration[3]);
+        }
+
+
 		K.setIdentity();
-		K(0,0) = outputCalibration[0] * w;
-		K(1,1) = outputCalibration[1] * h;
-		K(0,2) = outputCalibration[2] * w - 0.5;
-		K(1,2) = outputCalibration[3] * h - 0.5;
+        K(0,0) = outputCalibration[0] * w;
+        K(1,1) = outputCalibration[1] * h;
+        K(0,2) = outputCalibration[2] * w - 0.5;
+        K(1,2) = outputCalibration[3] * h - 0.5;
 	}
 
 	if(benchmarkSetting_fxfyfac != 0)
 	{
 		K(0,0) = fmax(benchmarkSetting_fxfyfac, (float)K(0,0));
 		K(1,1) = fmax(benchmarkSetting_fxfyfac, (float)K(1,1));
+        passthrough = false; // cannot pass through when fx / fy have been overwritten.
 	}
 
 
@@ -835,7 +917,6 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
 
 	distortCoordinates(remapX, remapY, remapX, remapY, h*w);
 
-	bool hasBlackPixel=false;
 
 	for(int y=0;y<h;y++)
 		for(int x=0;x<w;x++)
@@ -858,7 +939,6 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
 			{
 				remapX[x+y*w] = -1;
 				remapY[x+y*w] = -1;
-				hasBlackPixel=true;
 			}
 		}
 
@@ -873,9 +953,14 @@ void Undistort::readFromFile(const char* configFileName, int nPars, std::string 
 }
 
 
-UndistortFOV::UndistortFOV(const char* configFileName)
+UndistortFOV::UndistortFOV(const char* configFileName, bool noprefix)
 {
-	readFromFile(configFileName, 5);
+    printf("Creating FOV undistorter\n");
+
+    if(noprefix)
+        readFromFile(configFileName, 5);
+    else
+        readFromFile(configFileName, 5, "FOV ");
 }
 UndistortFOV::~UndistortFOV()
 {
@@ -886,11 +971,15 @@ void UndistortFOV::distortCoordinates(float* in_x, float* in_y, float* out_x, fl
 	float dist = parsOrg[4];
 	float d2t = 2.0f * tan(dist / 2.0f);
 
+
+
 	// current camera parameters
-	float fx = parsOrg[0] * wOrg;
-	float fy = parsOrg[1] * hOrg;
-	float cx = parsOrg[2] * wOrg - 0.5;
-	float cy = parsOrg[3] * hOrg - 0.5;
+    float fx = parsOrg[0];
+    float fy = parsOrg[1];
+    float cx = parsOrg[2];
+    float cy = parsOrg[3];
+
+
 
 	float ofx = K(0,0);
 	float ofy = K(1,1);
@@ -920,92 +1009,133 @@ void UndistortFOV::distortCoordinates(float* in_x, float* in_y, float* out_x, fl
 
 
 
-UndistortOpenCV::UndistortOpenCV(const char* configFileName)
+UndistortRadTan::UndistortRadTan(const char* configFileName, bool noprefix)
 {
-	readFromFile(configFileName, 8);
+    printf("Creating RadTan undistorter\n");
+
+    if(noprefix)
+        readFromFile(configFileName, 8);
+    else
+        readFromFile(configFileName, 8,"RadTan ");
 }
-UndistortOpenCV::~UndistortOpenCV()
+UndistortRadTan::~UndistortRadTan()
 {
 }
 
-void UndistortOpenCV::distortCoordinates(float* in_x, float* in_y, float* out_x, float* out_y, int n) const
+void UndistortRadTan::distortCoordinates(float* in_x, float* in_y, float* out_x, float* out_y, int n) const
 {
-	// RADTAN
-	float fx = parsOrg[0];
-	float fy = parsOrg[1];
-	float cx = parsOrg[2];
-	float cy = parsOrg[3];
-	float k1 = parsOrg[4];
-	float k2 = parsOrg[5];
-	float r1 = parsOrg[6];
-	float r2 = parsOrg[7];
+    // RADTAN
+    float fx = parsOrg[0];
+    float fy = parsOrg[1];
+    float cx = parsOrg[2];
+    float cy = parsOrg[3];
+    float k1 = parsOrg[4];
+    float k2 = parsOrg[5];
+    float r1 = parsOrg[6];
+    float r2 = parsOrg[7];
 
-	// EQUI
-//	float fx = parsOrg[0];
-//	float fy = parsOrg[1];
-//	float cx = parsOrg[2];
-//	float cy = parsOrg[3];
-//	float k1 = parsOrg[4];
-//	float k2 = parsOrg[5];
-//	float k3 = parsOrg[6];
-//	float k4 = parsOrg[7];
-
-
-	float ofx = K(0,0);
-	float ofy = K(1,1);
-	float ocx = K(0,2);
-	float ocy = K(1,2);
+    float ofx = K(0,0);
+    float ofy = K(1,1);
+    float ocx = K(0,2);
+    float ocy = K(1,2);
 
 
 
-	for(int i=0;i<n;i++)
-	{
-		float x = in_x[i];
-		float y = in_y[i];
+    for(int i=0;i<n;i++)
+    {
+        float x = in_x[i];
+        float y = in_y[i];
 
-		// RADTAN
-		float ix = (x - ocx) / ofx;
-		float iy = (y - ocy) / ofy;
-		float mx2_u = ix * ix;
-		float my2_u = iy * iy;
-		float mxy_u = ix * iy;
-		float rho2_u = mx2_u+my2_u;
-		float rad_dist_u = k1 * rho2_u + k2 * rho2_u * rho2_u;
-		float x_dist = ix + ix * rad_dist_u + 2.0 * r1 * mxy_u + r2 * (rho2_u + 2.0 * mx2_u);
-		float y_dist = iy + iy * rad_dist_u + 2.0 * r2 * mxy_u + r1 * (rho2_u + 2.0 * my2_u);
-		float ox = fx*x_dist+cx;
-		float oy = fy*y_dist+cy;
-
-
-
-		// EQUI
-//		float ix = (x - ocx) / ofx;
-//		float iy = (y - ocy) / ofy;
-//		float r = sqrt(ix * ix + iy * iy);
-//		float theta = atan(r);
-//		float theta2 = theta * theta;
-//		float theta4 = theta2 * theta2;
-//		float theta6 = theta4 * theta2;
-//		float theta8 = theta4 * theta4;
-//		float thetad = theta * (1 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8);
-//		float scaling = (r > 1e-8) ? thetad / r : 1.0;
-//		float ox = fx*ix*scaling + cx;
-//		float oy = fy*iy*scaling + cy;
+        // RADTAN
+        float ix = (x - ocx) / ofx;
+        float iy = (y - ocy) / ofy;
+        float mx2_u = ix * ix;
+        float my2_u = iy * iy;
+        float mxy_u = ix * iy;
+        float rho2_u = mx2_u+my2_u;
+        float rad_dist_u = k1 * rho2_u + k2 * rho2_u * rho2_u;
+        float x_dist = ix + ix * rad_dist_u + 2.0 * r1 * mxy_u + r2 * (rho2_u + 2.0 * mx2_u);
+        float y_dist = iy + iy * rad_dist_u + 2.0 * r2 * mxy_u + r1 * (rho2_u + 2.0 * my2_u);
+        float ox = fx*x_dist+cx;
+        float oy = fy*y_dist+cy;
 
 
-		out_x[i] = ox;
-		out_y[i] = oy;
-	}
+        out_x[i] = ox;
+        out_y[i] = oy;
+    }
 
 
 }
 
 
 
-UndistortKB::UndistortKB(const char* configFileName)
+UndistortEquidistant::UndistortEquidistant(const char* configFileName, bool noprefix)
+{
+    printf("Creating Equidistant undistorter\n");
+
+    if(noprefix)
+        readFromFile(configFileName, 8);
+    else
+        readFromFile(configFileName, 8,"Equidistant ");
+}
+UndistortEquidistant::~UndistortEquidistant()
+{
+}
+
+void UndistortEquidistant::distortCoordinates(float* in_x, float* in_y, float* out_x, float* out_y, int n) const
+{
+    // EQUI
+    float fx = parsOrg[0];
+    float fy = parsOrg[1];
+    float cx = parsOrg[2];
+    float cy = parsOrg[3];
+    float k1 = parsOrg[4];
+    float k2 = parsOrg[5];
+    float k3 = parsOrg[6];
+    float k4 = parsOrg[7];
+
+
+    float ofx = K(0,0);
+    float ofy = K(1,1);
+    float ocx = K(0,2);
+    float ocy = K(1,2);
+
+
+
+    for(int i=0;i<n;i++)
+    {
+        float x = in_x[i];
+        float y = in_y[i];
+
+        // EQUI
+        float ix = (x - ocx) / ofx;
+        float iy = (y - ocy) / ofy;
+        float r = sqrt(ix * ix + iy * iy);
+        float theta = atan(r);
+        float theta2 = theta * theta;
+        float theta4 = theta2 * theta2;
+        float theta6 = theta4 * theta2;
+        float theta8 = theta4 * theta4;
+        float thetad = theta * (1 + k1 * theta2 + k2 * theta4 + k3 * theta6 + k4 * theta8);
+        float scaling = (r > 1e-8) ? thetad / r : 1.0;
+        float ox = fx*ix*scaling + cx;
+        float oy = fy*iy*scaling + cy;
+
+        out_x[i] = ox;
+        out_y[i] = oy;
+    }
+}
+
+
+
+UndistortKB::UndistortKB(const char* configFileName, bool noprefix)
 {
 	printf("Creating KannalaBrandt undistorter\n");
-	readFromFile(configFileName, 8,"KannalaBrandt ");
+
+    if(noprefix)
+        readFromFile(configFileName, 8);
+    else
+        readFromFile(configFileName, 8,"KannalaBrandt ");
 }
 UndistortKB::~UndistortKB()
 {
@@ -1064,9 +1194,12 @@ void UndistortKB::distortCoordinates(float* in_x, float* in_y, float* out_x, flo
 
 
 
-UndistortPinhole::UndistortPinhole(const char* configFileName)
+UndistortPinhole::UndistortPinhole(const char* configFileName, bool noprefix)
 {
-	readFromFile(configFileName, 5);
+    if(noprefix)
+        readFromFile(configFileName, 5);
+    else
+        readFromFile(configFileName, 5,"Pinhole ");
 
 }
 UndistortPinhole::~UndistortPinhole()
@@ -1076,10 +1209,10 @@ UndistortPinhole::~UndistortPinhole()
 void UndistortPinhole::distortCoordinates(float* in_x, float* in_y, float* out_x, float* out_y, int n) const
 {
 	// current camera parameters
-	float fx = parsOrg[0] * wOrg;
-	float fy = parsOrg[1] * hOrg;
-	float cx = parsOrg[2] * wOrg - 0.5;
-	float cy = parsOrg[3] * hOrg - 0.5;
+    float fx = parsOrg[0];
+    float fy = parsOrg[1];
+    float cx = parsOrg[2];
+    float cy = parsOrg[3];
 
 	float ofx = K(0,0);
 	float ofy = K(1,1);

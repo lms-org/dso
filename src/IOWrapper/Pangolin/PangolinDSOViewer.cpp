@@ -39,7 +39,7 @@ namespace IOWrap
 
 
 
-PangolinDSOViewer::PangolinDSOViewer(int w, int h)
+PangolinDSOViewer::PangolinDSOViewer(int w, int h, bool startRunThread)
 {
 	this->w = w;
 	this->h = h;
@@ -64,7 +64,10 @@ PangolinDSOViewer::PangolinDSOViewer(int w, int h)
 	}
 
 	needReset = false;
-	runThread = boost::thread(&PangolinDSOViewer::run, this);
+
+
+    if(startRunThread)
+        runThread = boost::thread(&PangolinDSOViewer::run, this);
 
 }
 
@@ -111,7 +114,7 @@ void PangolinDSOViewer::run()
 	pangolin::GlTexture texResidual(w,h,GL_RGB,false,0,GL_RGB,GL_UNSIGNED_BYTE);
 
 
-	pangolin::View& images_display = pangolin::CreateDisplay()
+    pangolin::CreateDisplay()
 		  .SetBounds(0.0, 0.3, pangolin::Attach::Pix(UI_WIDTH), 1.0)
 		  .SetLayout(pangolin::LayoutEqual)
 		  .AddDisplay(d_kfDepth)
@@ -134,7 +137,7 @@ void PangolinDSOViewer::run()
 	pangolin::Var<bool> settings_show3D("ui.show3D",true,true);
 	pangolin::Var<bool> settings_showLiveDepth("ui.showDepth",true,true);
 	pangolin::Var<bool> settings_showLiveVideo("ui.showVideo",true,true);
-	pangolin::Var<bool> settings_showLiveResidual("ui.showResidual",true,true);
+    pangolin::Var<bool> settings_showLiveResidual("ui.showResidual",false,true);
 
 	pangolin::Var<bool> settings_showFramesWindow("ui.showFramesWindow",false,true);
 	pangolin::Var<bool> settings_showFullTracking("ui.showFullTracking",false,true);
@@ -418,7 +421,8 @@ void PangolinDSOViewer::drawConstraints()
 
 void PangolinDSOViewer::publishGraph(const std::map<long,Eigen::Vector2i> &connectivity)
 {
-	if(!setting_render_display3D) return;
+    if(!setting_render_display3D) return;
+    if(disableAllDisplay) return;
 
 	model3DMutex.lock();
 	connections.resize(connectivity.size()/2);
@@ -465,6 +469,7 @@ void PangolinDSOViewer::publishKeyframes(
 		CalibHessian* HCalib)
 {
 	if(!setting_render_display3D) return;
+    if(disableAllDisplay) return;
 
 	boost::unique_lock<boost::mutex> lk(model3DMutex);
 	for(FrameHessian* fh : frames)
@@ -481,6 +486,9 @@ void PangolinDSOViewer::publishKeyframes(
 void PangolinDSOViewer::publishCamPose(FrameShell* frame,
 		CalibHessian* HCalib)
 {
+    if(!setting_render_display3D) return;
+    if(disableAllDisplay) return;
+
 	boost::unique_lock<boost::mutex> lk(model3DMutex);
 	struct timeval time_now;
 	gettimeofday(&time_now, NULL);
@@ -498,6 +506,8 @@ void PangolinDSOViewer::publishCamPose(FrameShell* frame,
 void PangolinDSOViewer::pushLiveFrame(FrameHessian* image)
 {
 	if(!setting_render_displayVideo) return;
+    if(disableAllDisplay) return;
+
 	boost::unique_lock<boost::mutex> lk(openImagesMutex);
 
 	for(int i=0;i<w*h;i++)
@@ -508,8 +518,17 @@ void PangolinDSOViewer::pushLiveFrame(FrameHessian* image)
 
 	videoImgChanged=true;
 }
+
+bool PangolinDSOViewer::needPushDepthImage()
+{
+    return setting_render_displayDepth;
+}
 void PangolinDSOViewer::pushDepthImage(MinimalImageB3* image)
 {
+
+    if(!setting_render_displayDepth) return;
+    if(disableAllDisplay) return;
+
 	boost::unique_lock<boost::mutex> lk(openImagesMutex);
 
 	struct timeval time_now;

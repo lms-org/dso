@@ -149,7 +149,7 @@ public:
 	void printFrameLifetimes();
 	// contains pointers to active frames
 
-	IOWrap::Output3DWrapper* outputWrapper;
+    std::vector<IOWrap::Output3DWrapper*> outputWrapper;
 
 	bool isLost;
 	bool initFailed;
@@ -256,7 +256,7 @@ private:
 	Vec5 lastCoarseRMSE;
 
 
-	// ================== changed by mapper-thread. protected by trackMutex ===============
+	// ================== changed by mapper-thread. protected by mapMutex ===============
 	boost::mutex mapMutex;
 	std::vector<FrameShell*> allKeyFramesHistory;
 

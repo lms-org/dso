@@ -16,7 +16,7 @@ Get some datasets from [https://vision.in.tum.de/mono-dataset](https://vision.in
 ##### suitesparse and eigen3 (required).
 Required. Install with
 
-		sudo apt-get install libsuitesparse-dev libeigen3-dev
+		sudo apt-get install libsuitesparse-dev libeigen3-dev libboost-dev
 
 
 
@@ -103,30 +103,79 @@ However, it should be easy to adapt it to your needs, if required. The binary is
 
 - `vignette=XXX` where XXX is a monochrome 16bit or 8bit image containing the vignette as pixelwise attenuation factors. See TUM monoVO dataset for an example.
 
-- `calib=XXX` where XXX is a geometric camera calibration file. Currently supported:
+- `calib=XXX` where XXX is a geometric camera calibration file. See below.
+
+
+
+##### Geometric Calibration File.
+
+
+###### Calibration File for Pre-Rectified Images
+
+    Pinhole fx fy cx cy 0
+    in_width in_height
+    "crop" / "full" / "none" / "fx fy cx cy 0"
+    out_width out_height
 
 ###### Calibration File for FOV camera model:
 
-    fx fy cx cy omega
+    FOV fx fy cx cy omega
     in_width in_height
-    "crop" / "full" / "none" / "fx fy cx cy 0"
-    out_width out_height
-
-###### Calibration File for Pre-Rectified Images
-This one is with no radial distortion, as a special case of ATAN camera model but without the computational cost:
-
-    fx fy cx cy 0
-    in_width in_height
-    none
+    "crop" / "full" / "fx fy cx cy 0"
     out_width out_height
 
 
-###### Calibration File for OpenCV camera model
+###### Calibration File for Radio-Tangential camera model
 
-    fx fy cx cy d1 d2 d3 d4
+    RadTan fx fy cx cy k1 k2 r1 r2
     in_width in_height
-    "crop" / "full" / "none" / "fx fy cx cy 0"
+    "crop" / "full" / "fx fy cx cy 0"
     out_width out_height
+
+
+###### Calibration File for Equidistant camera model
+
+    Equidistant fx fy cx cy k1 k2 r1 r2
+    in_width in_height
+    "crop" / "full" / "fx fy cx cy 0"
+    out_width out_height
+
+
+(note: for backwards-compatibility, "Pinhole", "FOV" and "RadTan" can be omitted). See the respective
+`::distortCoordinates` implementation in  `Undistorter.cpp` for the exact corresponding projection function.
+Furthermore, it should be straight-forward to implement other camera models.
+
+
+**Explanation:**
+ Across all models `fx fy cx cy` denotes the focal length / principal point **relative to the image width / height**, 
+i.e., DSO computes the camera matrix `K` as
+
+		K(0,0) = width * fx
+		K(1,1) = width * fy
+		K(0,2) = width * cx - 0.5
+		K(1,2) = width * cy - 0.5
+For backwards-compatibility, if the given `cx` and `cy` are larger than 1, DSO assumes all four parameters to directly be the entries of K, 
+and ommits the above computation. 
+
+
+**That strange "0.5" offset:**
+ Internally, DSO uses the convention that the pixel at integer position (1,1) in the image 
+contains the integral over the continuous image function from (0.5,0.5) to (1.5,1.5), i.e., approximates a "point-sample" of the 
+continuous image functions at (1.0, 1.0).
+In turn, there seems to be no unifying convention across calibration toolboxes whether the pixel at integer position (1,1)
+contains the integral over (0.5,0.5) to (1.5,1.5), or the integral over (1,1) to (0,0). The above conversion assumes that 
+the given calibration in the calibration file uses the latter convention, and thus applies the -0.5 correction.
+Note that this also is taken into account when creating the scale-pyramid (see `globalCalib.cpp`).
+
+
+**Rectification modes:**
+ For image rectification, DSO either supports rectification to a user-defined pinhole model (`fx fy cx cy 0`),
+or has an option to automatically crop the image to the maximal rectangular, well-defined region (`crop`).
+`full` will preserve the full original field of view and is mainly meant for debugging - it will create black 
+borders in undefined image regions, which DSO does NOT ignore (i.e., this option will generate additional 
+outliers along those borders, and corrupt the scale-pyramid).
+
+
 
 
 #### 3.2 Commandline Options
@@ -151,6 +200,8 @@ there are many command line options available, see `main_dso_pangolin.cpp`. some
 - `end=X`: end at frame X
 - `speed=X`: force execution at X times real-time speed (0 = not enforcing real-time)
 - `save=1`: save lots of images for video creation
+- `quiet=1`: disable most console output (good for performance)
+- `sampleoutput=1`: register a "SampleOutputWrapper", printing some sample output data to the commandline. meant as example.
 
 
 
@@ -158,10 +209,26 @@ there are many command line options available, see `main_dso_pangolin.cpp`. some
 Some parameters can be reconfigured from the Pangolin GUI at runtime. Feel free to add more.
 
 
+#### 3.4 Accessing Data.
+The easiest way to access the Data (poses, pointclouds, etc.) computed by DSO (in real-time)
+is to create your own `Output3DWrapper`, and add it to the system, i.e., to `FullSystem.outputWrapper`.
+The respective member functions will be called on various occations (e.g., when a new KF is created, 
+when a new frame is tracked, etc.), exposing the relevant data.
+
+See `IOWrapper/Output3DWrapper.h` for a description of the different callbacks available,
+and some basic notes on where to find which data in the used classes.
+See `IOWrapper/OutputWrapper/SampleOutputWrapper.h` for an example implementation, which just prints
+some example data to the commandline (use the options `sampleoutput=1 quiet=1` to see the result).
+
+Note that these callbacks block the respective DSO thread, thus expensive computations should not
+be performed in the callbacks, a better practice is to just copy over / publish / output the data you need.
+
+Per default, `dso_dataset` writes all keyframe poses to a file `result.txt` at the end of a sequence,
+using the TUM RGB-D / TUM monoVO format ([timestamp x y z qx qy qz qw] of the cameraToWorld transformation).
 
 
 
-#### 3.4 Notes
+#### 3.5 Notes
 - the initializer is very slow, and does not work very reliably. Maybe replace by your own way to get an initialization.
 - see [https://github.com/JakobEngel/dso_ros](https://github.com/JakobEngel/dso_ros) for a minimal example project on how to use the library with your own input / output procedures.
 - see `settings.cpp` for a LOT of settings parameters. Most of which you shouldn't touch.

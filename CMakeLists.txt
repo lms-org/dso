@@ -36,6 +36,10 @@ set(dso_SOURCE_FILES
   src/util/settings.cpp
   src/util/Undistort.cpp
   src/util/globalCalib.cpp
+
+#as we won't use opencv we need the dummy object
+  src/IOWrapper/ImageDisplay_dummy.cpp
+  src/IOWrapper/ImageRW_dummy.cpp
 )
 
 
@@ -53,6 +57,5 @@ set(HAS_OPENCV 0)
 # compile main library.
 #include_directories( ${CSPARSE_INCLUDE_DIR} ${CHOLMOD_INCLUDE_DIR}) 
 add_library(dso SHARED ${dso_SOURCE_FILES})# ${dso_opencv_SOURCE_FILES} ${dso_pangolin_SOURCE_FILES})
+target_link_libraries(dso PRIVATE boost_system boost_thread)
 #TODO we need to link with boost
-
-
